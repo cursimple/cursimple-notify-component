@@ -1,0 +1,21 @@
+{
+  "host": "127.0.0.1",
+  "port": 8787,
+  "tokenEnv": "CURSIMPLE_NOTIFY_BRIDGE_TOKEN",
+  "binary": "openclaw",
+  "timeoutMs": 45000,
+  "routes": [
+    {
+      "id": "wechat-private",
+      "channel": "openclaw-weixin",
+      "account": "REPLACE_WITH_BOUND_ACCOUNT_ID",
+      "target": "REPLACE_WITH_BOUND_WECHAT_RECIPIENT"
+    },
+    {
+      "id": "qq-private",
+      "channel": "qqbot",
+      "account": "default",
+      "target": "qqbot:c2c:REPLACE_WITH_OPENID"
+    }
+  ]
+}

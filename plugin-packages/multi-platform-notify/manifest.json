@@ -1,0 +1,59 @@
+{
+  "id": "multi-platform-notify",
+  "kind": "extension",
+  "name": "多平台通知",
+  "publisher": "cursimple",
+  "version": "1.2.2",
+  "versionCode": 120,
+  "apiVersion": 8,
+  "entry": "main.js",
+  "description": "把课简课程、笔记和组件通知推送到微信、QQ、飞书、企业微信、钉钉、常见国内推送服务及 QQ／网易邮箱，支持多目标绑定和分阶段回执。",
+  "permissions": [
+    "notification.receive",
+    "storage.secure",
+    "network.proxy",
+    "network.fetch"
+  ],
+  "allowedHosts": [
+    "cursimple-extension.invalid",
+    "open.feishu.cn",
+    "qyapi.weixin.qq.com",
+    "oapi.dingtalk.com",
+    "docs.openclaw.ai",
+    "bot.q.qq.com",
+    "bots.qq.com",
+    "api.sgroup.qq.com",
+    "weixin.qq.com",
+    "smtp.qq.com",
+    "service.mail.qq.com",
+    "smtp.163.com",
+    "smtp.126.com",
+    "sctapi.ftqq.com",
+    "sct.ftqq.com",
+    "push.ft07.com",
+    "sc3.ft07.com",
+    "www.pushplus.plus",
+    "wxpusher.zjiecode.com",
+    "api2.pushdeer.com",
+    "api.day.app",
+    "www.pushdeer.com",
+    "bark.day.app",
+    "mail.163.com",
+    "mail.126.com"
+  ],
+  "extension": {
+    "title": "多平台通知",
+    "notificationReceiver": true,
+    "loginUrl": "https://cursimple-extension.invalid/",
+    "runUrl": "https://cursimple-extension.invalid/",
+    "ui": {
+      "entry": "ui/index.html",
+      "settingsEntry": "ui/index.html",
+      "type": "html"
+    }
+  },
+  "limits": {
+    "timeoutMs": 120000,
+    "maxOutputBytes": 1048576
+  }
+}
