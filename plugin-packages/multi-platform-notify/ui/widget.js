@@ -4,7 +4,7 @@ const context=state.context;
 const compact=context.width<180||context.height<120;
 if(compact)document.body.classList.add('compact');
 document.documentElement.style.setProperty('--font-scale',context.fontScale);
-const data=state.data||{};
+const data=state||{};
 const targets=Array.isArray(data.notificationTargets)?data.notificationTargets:[];
 document.getElementById('count').textContent=targets.filter(x=>x.enabled!==false).length+'/'+targets.length;
 const list=document.getElementById('targets');
