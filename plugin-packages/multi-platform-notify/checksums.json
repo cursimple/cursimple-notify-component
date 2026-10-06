@@ -2,8 +2,8 @@
   "algorithm": "SHA-256",
   "files": {
     "main.js": "f1c679732a54e0e07c440d56885c4bfa2ce5d1f02568f09f78227af7f95750d3",
-    "manifest.json": "3dd0fa79a01048c805e1c78845fe6aea1891f17eca1ec3154e4de63dd947a206",
-    "ui/app.js": "e94988084105ec0de6d9b058fff21da5eb256b93a33cf03b81c401a3d04b4f45",
+    "manifest.json": "5985cff0391f272c905977c540c2affaa762fc05f3b5784d09fa61ea60c83d9f",
+    "ui/app.js": "b971b6f3a28e55c0c8c7922c3321e74de28945fec721b1e173bca7dc09c5fa25",
     "ui/index.html": "a5a201e203ccb8489da2ea1152990b1c9df8a241da8f45adade0e14669d0a386",
     "ui/interactions.js": "a806ac8df27ed76fe647f7407760000f1d34a2a2f16dd3f158457e9c71135d96",
     "ui/style.css": "c6ec7b89670d444f8bc08f5324c6a8d2b2689c12de9faf12efe6acac9c731bad",
