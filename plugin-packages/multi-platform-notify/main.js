@@ -1,4 +1,4 @@
-// 平台协议只在本组件里实现；宿主只交出通用通知和受限传输能力。
+// Platform protocols belong to this component; the host supplies events and restricted transport.
 const PLATFORMS = new Set(['feishu', 'wecom', 'dingtalk', 'wechat', 'qq', 'openclaw', 'webhook', 'qqmail', 'netease163', 'netease126', 'serverchan', 'pushplus', 'wxpusher', 'pushdeer', 'bark']);
 const KINDS = new Set(['class', 'memo.due', 'component.new', 'component.due']);
 export const WECHAT_BASE = 'https://ilinkai.weixin.qq.com';
@@ -185,7 +185,7 @@ async function sendDirect(ctx,target,event,text) {
       if(typeof result.id!=='string'||!result.id)throw new ChannelError('QQ 未返回消息 ID，发送结果需核对',true);
     };
     try{await post();}catch(error){
-      // 只在明确的鉴权拒绝后重新取令牌，不重发未知结果或配额拒绝。
+      // Refresh tokens only after explicit auth rejection, never after unknown delivery or quota refusal.
       if(![401,11253,40014].includes(error.code)||error.unknown)throw error;
       session=await qqAccessToken(ctx,target);await saveSession(ctx,target,session);await post();
     }
@@ -317,7 +317,6 @@ export async function sendToTarget(ctx, target, event, force = false, receipt = 
   }
 }
 
-/** 收件人成功后先保存回执，再处理下一个目标；重试跳过已送达目标。 */
 export async function deliverNotifications(ctx) {
   const config = validateConfiguration(ctx.secureConfiguration);
   const targets = new Map(config.targets.map(x => [x.id,x]));

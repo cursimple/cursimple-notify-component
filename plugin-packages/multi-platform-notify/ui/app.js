@@ -1,4 +1,5 @@
 import {configurationEnvelope,validateConfiguration,MAIL_PROFILES,WECHAT_BASE,startWechatLogin,pollWechatLogin,pullWechatSession,qqAccessToken,channelRequest} from '../main.js';
+import {bindSegments,segmentPosition,createSheets} from './interactions.js';
 const sdk = window.CurSimpleComponent;
 const app = document.getElementById('app');
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -35,16 +36,28 @@ const platformGroups=[
 ];
 function platformMenu(draft){return `<label class="platform-search"><span class="sr-only">搜索平台</span><input id="platform-search" type="search" placeholder="搜索平台，例如：微信、网易、Bark" autocomplete="off"></label><div class="platform-options">${platformGroups.map(g=>`<section data-platform-group><h3>${g.name}</h3>${g.ids.map(id=>{const p=platforms[id];return `<button type="button" role="option" aria-selected="${id===draft.platform}" data-platform="${id}" data-search="${esc([p.name,p.search||'',id].join(' ').toLowerCase())}" class="${id===draft.platform?'on':''}">${markTile(id,'platform mini')}<span class="grow">${esc(p.name)}</span>${id===draft.platform?icon('check'):''}</button>`;}).join('')}</section>`).join('')}<p id="platform-empty" class="hint" hidden>没有匹配的平台</p></div>`;}
 
-let state=sdk?.state, config={targets:[]}, history=[], tab='targets', loaded=false, busy=false, error='', timer;
+let state=sdk?.state, config={targets:[]}, history=[], tab='targets', loaded=false, busy=false, error='', timer, toastHide, refreshing=false, historyRequest=null;
+let lastHtml='', lastTab=null;
+const sendingTargets=new Set(), tabScroll=new Map();
 function theme(value) {
  const t=value?.context?.theme;
- if(t){for(const [key,variable] of Object.entries({background:'bg',surface:'surface',surfaceVariant:'soft',onSurface:'text',onSurfaceVariant:'muted',primary:'accent',onPrimary:'on-accent',outlineVariant:'line',error:'error'}))if(/^#[\da-f]{6,8}$/i.test(t[key]||''))document.documentElement.style.setProperty('--'+variable,t[key]);document.documentElement.style.colorScheme=t.dark?'dark':'light';}
+ if(t){for(const [key,variable] of Object.entries({background:'bg',surface:'surface',surfaceVariant:'soft',onSurface:'text',onSurfaceVariant:'muted',primary:'accent',onPrimary:'on-accent',outlineVariant:'line',error:'error',primaryContainer:'accent-soft',onPrimaryContainer:'on-soft',surfaceContainerLow:'surface-low'}))if(/^#[\da-f]{6,8}$/i.test(t[key]||''))document.documentElement.style.setProperty('--'+variable,t[key]);document.documentElement.style.colorScheme=t.dark?'dark':'light';document.documentElement.dataset.theme=t.dark?'dark':'light';}
  document.documentElement.style.setProperty('--font-scale',String(value?.context?.fontScale||1));
 }
-function toast(text){const el=document.getElementById('toast');el.textContent=text;el.hidden=false;clearTimeout(timer);timer=setTimeout(()=>el.hidden=true,3500);}
-function closeSheet(){cancelBinding?.();cancelBinding=null;document.getElementById('sheet')?.remove();}
-function sheet(title,body,bind){const fresh=!document.getElementById('sheet');closeSheet();const el=document.createElement('div');el.id='sheet';el.className='sheet-backdrop';el.innerHTML=`<section class="sheet${fresh?' enter':''}" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header><h2>${esc(title)}</h2><button class="icon" id="close-sheet" aria-label="关闭">${icon('close')}</button></header><div class="sheet-body">${body}</div></section>`;document.body.append(el);el.querySelector('#close-sheet').onclick=closeSheet;el.onclick=e=>{if(e.target===el)closeSheet();};bind?.(el);}
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
+function toast(text){
+ const el=document.getElementById('toast');clearTimeout(timer);clearTimeout(toastHide);
+ el.textContent=text;el.hidden=false;
+ requestAnimationFrame(()=>el.classList.add('show'));
+ timer=setTimeout(()=>{el.classList.remove('show');toastHide=setTimeout(()=>el.hidden=true,240);},3500);
+}
+const sheets=createSheets({app,icon,cancel(){cancelBinding?.();cancelBinding=null;}});
+const sheet=sheets.open,closeSheet=sheets.close;
+function switchTab(next){
+ if(next===tab)return;
+ tabScroll.set(tab,window.scrollY);tab=next;render();
+ window.scrollTo(0,tabScroll.get(tab)||0);
+ if(tab==='history')loadHistory();
+}
 const when = value => new Intl.DateTimeFormat('zh-CN',{timeZone:state?.context?.timeZone||'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(value));
 function recordStatus(row){
  if(row.cancelled)return ['已停止',''];
@@ -65,13 +78,22 @@ function render(){
  const body=tab==='targets' ? config.targets.length?config.targets.map(targetCard).join(''):emptyTargets : history.length?history.map(historyCard).join(''):emptyHistory;
  const summary=!config.targets.length?'绑定你的第一个平台':enabled?`个目标已启用`:'目前没有启用的目标';
  const detail=!config.targets.length?'同一平台也能绑定多个群或帐号':`共 ${config.targets.length} 个目标${paused?` · ${paused} 个已暂停`:''}`;
- app.innerHTML=`<div class="page"><header class="top"><span class="logo">${icon('send')}</span><span class="title-copy"><h1>多平台通知</h1><p>你的课程和待办，送到常用的平台</p></span><button class="icon" id="help" aria-label="接入指南">${icon('help')}</button></header><section class="overview"><span class="total">${enabled}</span><span class="overview-copy"><strong>${summary}</strong><p>${detail}</p></span></section>${warn?`<button class="alert-row" id="show-warn">${icon('alert')}<span class="grow">有 ${warn} 条发送记录需要处理</span><span>查看</span></button>`:''}<button class="primary add" id="add" ${!loaded||busy?'disabled':''}>${icon('plus')}添加通知目标</button><div class="tab-row"><nav class="segs" role="tablist" aria-label="通知页面"><button role="tab" aria-selected="${tab==='targets'}" data-tab="targets" class="${tab==='targets'?'on':''}">绑定目标</button><button role="tab" aria-selected="${tab==='history'}" data-tab="history" class="${tab==='history'?'on':''}">发送记录${warn?`<i class="count">${warn}</i>`:''}</button></nav><button class="icon bordered" id="refresh" aria-label="刷新绑定与记录">${icon('refresh')}</button></div>${error?`<p class="feedback" role="alert">${esc(error)}</p>`:''}${loaded?body:'<p class="loading">正在读取绑定…</p>'}<p class="footnote">已读或被忽略的组件内容不会继续排队推送。笔记待办在截止前 24 小时内提醒一次；上课提醒跟随课简的上课通知设置。</p></div>`;
+ const html=`<div class="page"><header class="top"><span class="logo">${icon('send')}</span><span class="title-copy"><h1>多平台通知</h1><p>你的课程和待办，送到常用的平台</p></span><button class="icon" id="help" aria-label="接入指南">${icon('help')}</button></header><section class="overview"><span class="total">${enabled}</span><span class="overview-copy"><strong>${summary}</strong><p>${detail}</p></span></section>${warn?`<button class="alert-row" id="show-warn">${icon('alert')}<span class="grow">有 ${warn} 条发送记录需要处理</span><span>查看</span></button>`:''}<button class="primary add" id="add" ${!loaded||busy?'disabled':''}>${icon('plus')}添加通知目标</button><div class="tab-row"><nav class="segs" role="tablist" aria-label="通知页面"><span class="seg-thumb" aria-hidden="true"></span><button role="tab" aria-selected="${tab==='targets'}" data-tab="targets" class="${tab==='targets'?'on':''}">绑定目标</button><button role="tab" aria-selected="${tab==='history'}" data-tab="history" class="${tab==='history'?'on':''}">发送记录${warn?`<i class="count">${warn}</i>`:''}</button></nav><button class="icon bordered${refreshing?' spin':''}" id="refresh" aria-label="刷新绑定与记录" ${refreshing?'disabled':''}>${icon('refresh')}</button></div>${error?`<p class="feedback" role="alert">${esc(error)}</p>`:''}<div id="content-pane" class="content-pane">${loaded?body:'<p class="loading">正在读取绑定…</p>'}</div><p class="footnote">已读或被忽略的组件内容不会继续排队推送。笔记待办在截止前 24 小时内提醒一次；上课提醒跟随课简的上课通知设置。</p></div>`;
+ if(html===lastHtml)return;
+ const scroll=window.scrollY,position=segmentPosition(app);
+ const focused=app.contains(document.activeElement)?document.activeElement:null;
+ const focusSelector=focused?.id?`#${CSS.escape(focused.id)}`:focused?.dataset.enable?`[data-enable="${CSS.escape(focused.dataset.enable)}"]`:null;
+ const changedTab=lastTab!==null&&lastTab!==tab;
+ app.innerHTML=html;lastHtml=html;lastTab=tab;bindSegments(app,position);
+ if(changedTab)app.querySelector('#content-pane').classList.add('enter');
+ if(focusSelector)app.querySelector(focusSelector)?.focus({preventScroll:true});
+ window.scrollTo(0,scroll);
  app.querySelector('#add').onclick=()=>edit();app.querySelector('#help').onclick=guide;app.querySelector('#refresh').onclick=load;
- app.querySelector('#show-warn')?.addEventListener('click',()=>{tab='history';render();loadHistory();});
- app.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();if(tab==='history')loadHistory();});
+ app.querySelector('#show-warn')?.addEventListener('click',()=>switchTab('history'));
+ app.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
  app.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>edit(config.targets.find(x=>x.id===b.dataset.edit)));
  app.querySelectorAll('[data-enable]').forEach(b=>b.onchange=async()=>{const next=clone(config);next.targets.find(x=>x.id===b.dataset.enable).enabled=b.checked;await save(next);});
- app.querySelectorAll('[data-test]').forEach(b=>b.onclick=()=>test(b.dataset.test,b));
+ app.querySelectorAll('[data-test]').forEach(b=>b.onclick=()=>test(b.dataset.test));
  app.querySelectorAll('[data-retry]').forEach(b=>b.onclick=()=>retry(b.dataset.retry));
 }
 function lastResult(id){
@@ -80,12 +102,35 @@ function lastResult(id){
  const status=row.receipts.find(x=>x.targetId===id)?.status,tone=['failed','unknown'].includes(status)?'warn':['sent','accepted'].includes(status)?'ok':'';
  return `<p class="last ${tone}"><i class="dot" aria-hidden="true"></i>最近：${resultText[status]||'待发送'} · ${when(row.notification.createdAt)}</p>`;
 }
-function targetCard(t){const p=platforms[t.platform];let host='';try{host=new URL(t.url).hostname;}catch{}const sub=[p.name,host].filter(Boolean).join(' · ');return `<section class="target${t.enabled?'':' paused'}"><div class="target-top">${markTile(t.platform)}<span class="target-info"><h2>${esc(t.name)}</h2><small>${esc(sub)}</small></span><label class="switch"><input type="checkbox" role="switch" data-enable="${esc(t.id)}" aria-label="启用 ${esc(t.name)}" ${t.enabled?'checked':''} ${busy?'disabled':''}></label></div><div class="range">${t.kinds.map(x=>`<span>${esc(kinds[x])}</span>`).join('')}</div>${lastResult(t.id)}<div class="actions"><button class="secondary" data-edit="${esc(t.id)}">编辑绑定</button><button class="secondary accent" data-test="${esc(t.id)}">发送测试</button></div></section>`;}
+function targetCard(t){const p=platforms[t.platform];let host='';try{host=new URL(t.url).hostname;}catch{}const sub=[p.name,host].filter(Boolean).join(' · ');return `<section class="target${t.enabled?'':' paused'}"><div class="target-top">${markTile(t.platform)}<span class="target-info"><h2>${esc(t.name)}</h2><small>${esc(sub)}</small></span><label class="switch"><input type="checkbox" role="switch" data-enable="${esc(t.id)}" aria-label="启用 ${esc(t.name)}" ${t.enabled?'checked':''} ${busy?'disabled':''}></label></div><div class="range">${t.kinds.map(x=>`<span>${esc(kinds[x])}</span>`).join('')}</div>${lastResult(t.id)}<div class="actions"><button class="secondary" data-edit="${esc(t.id)}">编辑绑定</button><button class="secondary accent" data-test="${esc(t.id)}" ${sendingTargets.has(t.id)||busy?'disabled':''}>${sendingTargets.has(t.id)?'正在发送…':'发送测试'}</button></div></section>`;}
 function historyCard(row){const event=row.notification,[label,tone]=recordStatus(row);const lines=row.targetIds.map(id=>{const receipt=row.receipts.find(x=>x.targetId===id);const name=config.targets.find(x=>x.id===id)?.name||'已移除目标';return `<div class="receipt"><span>${esc(name)}</span><span class="result">${resultText[receipt?.status]||'待发送'}</span></div>${receipt?.error?`<p class="${['failed','unknown'].includes(receipt.status)?'receipt-error':'receipt-note'}">${esc(receipt.error)}</p>`:''}`;}).join('');const retryable=!row.cancelled&&event.expiresAt>Date.now()&&row.receipts.some(x=>['failed','unknown','queued','querying'].includes(x.status));return `<section class="record"><div class="record-head"><strong>${esc(event.title)}</strong><span class="status ${tone}">${label}</span></div><small>${esc(event.sourceName)} · ${when(event.createdAt)}</small>${lines}${retryable?`<div class="actions"><button class="secondary accent" data-retry="${esc(event.id)}">${row.receipts.some(x=>x.status==='unknown')?'核对后重试':row.receipts.some(x=>['queued','querying'].includes(x.status))?'立即查询':'立即重试'}</button></div>`:''}</section>`;}
-async function load(){try{error='';const saved=await sdk.request('notification.config.get');config=validateConfiguration(saved.values?.targets?saved.values:{targets:[]});loaded=true;await loadHistory();}catch(e){loaded=true;error=e.message;}render();}
-async function loadHistory(){try{history=await sdk.request('notification.history');if(tab==='history')render();}catch(e){error=e.message;render();}}
-async function save(next){if(busy)return false;busy=true;error='';render();try{const validated=validateConfiguration(next);await sdk.request('notification.config.save',configurationEnvelope(validated));config=validated;toast('绑定已保存');return true;}catch(e){error=e.message;toast(e.message);return false;}finally{busy=false;render();}}
-async function test(id,button){if(button.disabled)return;button.disabled=true;button.textContent='正在发送…';try{const receipt=await sdk.request('notification.test',{targetId:id});toast(receipt.status==='queued'?'服务已接收，正在等待平台结果':receipt.status==='accepted'?'平台已接收请求，请在接收端核对':'平台已确认发送，请在目标平台查看测试消息');}catch(e){toast(e.message);}finally{button.disabled=false;button.textContent='发送测试';await loadHistory();}}
+async function load(){
+ if(refreshing)return;refreshing=true;error='';render();
+ try{const saved=await sdk.request('notification.config.get');config=validateConfiguration(saved.values?.targets?saved.values:{targets:[]});loaded=true;await loadHistory();}
+ catch(e){loaded=true;error=e.message;}
+ finally{refreshing=false;render();}
+}
+async function loadHistory(){
+ if(historyRequest)return historyRequest;
+ historyRequest=(async()=>{try{history=await sdk.request('notification.history');render();}catch(e){error=e.message;render();}})();
+ try{await historyRequest;}finally{historyRequest=null;}
+}
+async function save(next){
+ if(busy)return false;
+ const previous=config;
+ let validated;try{validated=validateConfiguration(next);}catch(e){error=e.message;toast(e.message);render();return false;}
+ busy=true;error='';config=validated;render();
+ try{await sdk.request('notification.config.save',configurationEnvelope(validated));toast('绑定已保存');return true;}
+ catch(e){config=previous;error=e.message;toast(e.message);return false;}
+ finally{busy=false;render();}
+}
+async function test(id){
+ if(sendingTargets.has(id)||busy)return;
+ sendingTargets.add(id);render();
+ try{const receipt=await sdk.request('notification.test',{targetId:id});toast(receipt.status==='queued'?'服务已接收，正在等待平台结果':receipt.status==='accepted'?'平台已接收请求，请在接收端核对':'平台已确认发送，请在目标平台查看测试消息');}
+ catch(e){toast(e.message);}
+ finally{sendingTargets.delete(id);await loadHistory();render();}
+}
 async function retry(id){const row=history.find(x=>x.notification.id===id);const run=async()=>{try{await sdk.request('notification.retry',{id});toast(row.receipts.some(x=>['queued','querying'].includes(x.status))?'已安排结果查询，已提交的消息不会重复发送':'已安排重试，已成功的目标不会重复发送');await loadHistory();}catch(e){toast(e.message);}};if(row.receipts.some(x=>x.status==='unknown'))sheet('确认重新发送？','<p>平台可能已经收到这条消息。请先核对目标平台，再重试未确认的目标。</p><div class="save-row"><button class="secondary" id="cancel">取消</button><button class="primary" id="confirm">确认重试</button></div>',root=>{root.querySelector('#cancel').onclick=closeSheet;root.querySelector('#confirm').onclick=()=>{closeSheet();run();};});else await run();}
 const selects=new Map();
 function selectField(id,label,value,options,onPick){selects.set(id,onPick);const current=options.find(o=>o.value===value)||options[0];return `<div class="field select-field" data-select="${id}"><span id="${id}-label">${esc(label)}</span><input type="hidden" id="${id}" value="${esc(current.value)}"><button type="button" class="select" id="${id}-trigger" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="${id}-label ${id}-trigger"><span>${esc(current.label)}</span>${icon('chevron')}</button><div class="select-menu" role="listbox" hidden>${options.map(o=>`<button type="button" role="option" aria-selected="${o.value===current.value}" data-pick="${esc(o.value)}" class="${o.value===current.value?'on':''}"><span class="grow">${esc(o.label)}</span>${o.value===current.value?icon('check'):''}</button>`).join('')}</div></div>`;}
@@ -168,6 +213,6 @@ function edit(original){const draft=original?clone(original):{id:crypto.randomUU
  root.querySelector('#remove')?.addEventListener('click',async()=>{if(await save({targets:config.targets.filter(x=>x.id!==draft.id)}))closeSheet();});
  });};draw();}
 function guide(){sheet('接入指南',`<div class="guide"><details class="guide-item" open><summary>飞书、企业微信、钉钉${icon('chevron')}</summary><div class="guide-body"><p>在目标群内创建机器人或消息推送，复制 Webhook 到绑定页面。开启签名或关键词时，填写对应配置。</p></div></details><details class="guide-item"><summary>个人微信${icon('chevron')}</summary><div class="guide-body"><p>选择个人微信后点击「扫码连接微信」，用微信扫码并确认。需要配对数字时在此填写。连接后向机器人发一条消息，组件会绑定你的私信会话，再保存并发送测试。可以截图后从微信扫一扫的相册中选择二维码。微信渠道使用腾讯微信机器人接口，当前支持私信，无法向任意微信联系人或群发送。</p></div></details><details class="guide-item"><summary>更多国内推送服务${icon('chevron')}</summary><div class="guide-body"><p>Server酱填写 SendKey，兼容 SCT 和 sctp；先在平台配置接收通道。PushPlus 填推送 Token，群组需订阅；可选查询密钥需在平台开启开放接口和安全 IP。WxPusher 填应用 AppToken 与已订阅用户 UID。PushDeer 填接收设备的 PushKey，Bark 填 iPhone / iPad 的设备 Key；两者支持自建 HTTPS 服务。</p><p>接口只确认接收或创建任务时，记录显示「平台已接收」。PushPlus 开启查询后，排队显示「等待平台结果」，后台核对后才显示已发送。</p></div></details><details class="guide-item"><summary>QQ / 网易邮箱${icon('chevron')}</summary><div class="guide-body"><p>在对应邮箱设置中开启 SMTP 服务并生成授权码。选择对应邮箱，填写发件邮箱、授权码和收件邮箱。可以发给自己，也可以发给其他邮箱；保存后发送测试，检查收件箱或垃圾邮件。授权码不是 QQ 登录密码。</p><button class=secondary data-doc="https://service.mail.qq.com/">QQ 邮箱帮助中心</button></div></details><details class="guide-item"><summary>QQ 机器人${icon('chevron')}</summary><div class="guide-body"><p>在 QQ 开放平台创建并启用官方机器人，填入 AppID 和 AppSecret。点「获取收件人」，按提示私聊机器人或在群里 @ 机器人发送随机绑定口令；也可以填写该机器人官方消息事件中的 OpenID。机器人主动消息可能受配额和近期互动条件限制，平台拒绝时发送记录会显示失败。</p><button class="secondary" data-doc="https://bot.q.qq.com/">QQ 开放平台</button></div></details><details class="guide-item"><summary>保存与测试${icon('chevron')}</summary><div class="guide-body"><p>绑定和会话令牌加密保存在手机，不需要运行 OpenClaw。保存后点「发送测试」，成功回执只说明平台接受请求，请在对应平台核对实际消息。手机需要联网并允许课简后台运行。</p></div></details><details class="guide-item"><summary>已有 OpenClaw 的用户${icon('chevron')}</summary><div class="guide-body"><p>仍可在 QQ 或微信的「接入方式」中选择已有桥接，填写服务地址、令牌和路由 ID。</p></div></details></div>`,root=>root.querySelectorAll('[data-doc]').forEach(b=>b.onclick=()=>sdk.request('ui.openExternal',{url:b.dataset.doc}).catch(e=>toast(e.message))));}
-if(!sdk){app.innerHTML='<p class="loading">请在支持 API 6 的课简中打开此组件。</p>';}else{sdk.subscribe(value=>{state=value;theme(value);render();});load();}
+if(!sdk){app.innerHTML='<p class="loading">请在支持 API 8 的课简中打开此组件。</p>';}else{sdk.subscribe(value=>{state=value;theme(value);render();});load();}
 
 setInterval(()=>{if(tab==='history'&&loaded&&!document.hidden)loadHistory();},5000);

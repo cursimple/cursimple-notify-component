@@ -3,3 +3,7 @@ node_modules/
 bridge/config.json
 bridge/state/
 .DS_Store
+
+__pycache__/
+*.py[cod]
+.venv/

@@ -33,7 +33,7 @@ export function runOpenClaw(binary,args,timeoutMs) {
     const done=result=>{if(finished)return;finished=true;clearTimeout(timer);resolve(result);};
     const timer=setTimeout(()=>{timedOut=true;child.kill('SIGTERM');setTimeout(()=>child.kill('SIGKILL'),1000).unref();done({ok:false,unknown:true,error:'OpenClaw 未在时限内返回结果，请先在平台核对'});},timeoutMs);
     child.stdout.on('data',chunk=>{stdout+=chunk.toString();if(stdout.length>256*1024){child.kill();done({ok:false,unknown:true,error:'OpenClaw 返回过大，发送结果未确认'});}});
-    child.stderr.on('data',()=>{}); // 不把渠道凭据或个人收件人写进 HTTP 日志。
+    child.stderr.on('data',()=>{});
     child.on('error',()=>done({ok:false,unknown:false,error:'无法启动 OpenClaw，请检查安装与 binary 配置'}));
     child.on('close',code=>{
       if(timedOut)return;
@@ -52,7 +52,6 @@ export function runOpenClaw(binary,args,timeoutMs) {
 export async function createBridge(config,{stateFile,send=runOpenClaw}={}) {
   const ledgerPath=stateFile||resolve(dirname(fileURLToPath(import.meta.url)),'state/receipts.json');
   let ledger={};try{ledger=JSON.parse(await readFile(ledgerPath,'utf8'));}catch(error){if(error.code!=='ENOENT')throw new Error('桥接发送记录无法读取，请检查状态文件');}
-  // 上次进程退出时仍在发送的消息视为未确认，保留供用户核对。
   for(const row of Object.values(ledger))if(row.status==='sending'){row.status='unknown';row.result={ok:false,unknown:true,error:'上次发送被中断，请在平台核对后重试'};}
   const active=new Map();let saving=Promise.resolve();
   function persist(){const snapshot=JSON.stringify(ledger);saving=saving.then(async()=>{await mkdir(dirname(ledgerPath),{recursive:true,mode:0o700});const temp=ledgerPath+'.tmp';await writeFile(temp,snapshot,{mode:0o600});await rename(temp,ledgerPath);});return saving;}
