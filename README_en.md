@@ -111,4 +111,4 @@ References: [Tencent WeChat channel](https://docs.openclaw.ai/zh-CN/channels/wec
 
 ## Page interactions
 
-The local 1.2.3 build uses rounded press feedback, a sliding selection indicator and dismissible sheets based on the YuKeTang component interactions. Platform changes preserve draft fields and scroll position. Unchanged delivery polling preserves the page; pending sends prevent duplicate clicks. Controls follow host colors, font scale and reduced-motion preferences.
+Version 1.2.3 uses rounded press feedback, a sliding selection indicator and dismissible sheets based on the YuKeTang component interactions. Platform changes preserve draft fields and scroll position. Unchanged delivery polling preserves the page; pending sends prevent duplicate clicks. Controls follow host colors, font scale and reduced-motion preferences.
