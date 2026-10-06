@@ -3,9 +3,9 @@
   "kind": "extension",
   "name": "多平台通知",
   "publisher": "cursimple",
-  "version": "1.2.3",
-  "versionCode": 121,
-  "apiVersion": 8,
+  "version": "1.2.5",
+  "versionCode": 123,
+  "apiVersion": 9,
   "entry": "main.js",
   "description": "把课简课程、笔记和组件通知推送到微信、QQ、飞书、企业微信、钉钉、常见国内推送服务及 QQ／网易邮箱，支持多目标绑定和分阶段回执。",
   "permissions": [
@@ -50,7 +50,17 @@
       "entry": "ui/index.html",
       "settingsEntry": "ui/index.html",
       "type": "html"
-    }
+    },
+    "widgets": [
+      {
+        "id": "status",
+        "title": "通知状态",
+        "description": "多平台通知组件提供的目标与最近发送状态",
+        "entry": "ui/widget.html",
+        "columns": 4,
+        "rows": 2
+      }
+    ]
   },
   "limits": {
     "timeoutMs": 120000,

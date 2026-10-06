@@ -2,12 +2,15 @@
   "algorithm": "SHA-256",
   "files": {
     "main.js": "f1c679732a54e0e07c440d56885c4bfa2ce5d1f02568f09f78227af7f95750d3",
-    "manifest.json": "9273af2b90263ac6230eda7add3a5c86f347864354f80c7a6459a2849b292723",
-    "ui/app.js": "c79af93ef9bc2e2118db5c64dfa4f6d9d6a711edf21ddd24de26533753e55571",
+    "manifest.json": "1dbbe075adc0ee2e70cfc992463780b4550179d93f8e65e2fd7cbaa9ef55bf05",
+    "ui/app.js": "e94988084105ec0de6d9b058fff21da5eb256b93a33cf03b81c401a3d04b4f45",
     "ui/index.html": "a5a201e203ccb8489da2ea1152990b1c9df8a241da8f45adade0e14669d0a386",
     "ui/interactions.js": "a806ac8df27ed76fe647f7407760000f1d34a2a2f16dd3f158457e9c71135d96",
     "ui/style.css": "c6ec7b89670d444f8bc08f5324c6a8d2b2689c12de9faf12efe6acac9c731bad",
     "ui/vendor/LICENSE.txt": "3a850fa5f08101db6f40676c2786e10bd2cd5fff7b12ffdf1e0c434d4e49d90c",
-    "ui/vendor/qrcode.js": "79ec86f82856005b1c887905cfccfcfbec3821ca61c7fd5a952faa5f778f791c"
+    "ui/vendor/qrcode.js": "79ec86f82856005b1c887905cfccfcfbec3821ca61c7fd5a952faa5f778f791c",
+    "ui/widget.css": "d4e4c6f59f7ffb27557248bf5be4dd66b260f64f420d3c7cf7f44b22c5c6af94",
+    "ui/widget.html": "6e30dfaba65e31e25f60cf57e5df9113819fc0ff7dd1c7975dbbeb3b0417261a",
+    "ui/widget.js": "9d616aa3d6af25da867d1f080ce821832c4f09624eb84ac1773fd09f6ac19f49"
   }
 }
