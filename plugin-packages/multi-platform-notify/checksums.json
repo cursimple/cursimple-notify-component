@@ -1,16 +1,21 @@
 {
   "algorithm": "SHA-256",
   "files": {
-    "main.js": "f1c679732a54e0e07c440d56885c4bfa2ce5d1f02568f09f78227af7f95750d3",
-    "manifest.json": "5985cff0391f272c905977c540c2affaa762fc05f3b5784d09fa61ea60c83d9f",
-    "ui/app.js": "b971b6f3a28e55c0c8c7922c3321e74de28945fec721b1e173bca7dc09c5fa25",
-    "ui/index.html": "a5a201e203ccb8489da2ea1152990b1c9df8a241da8f45adade0e14669d0a386",
+    "main.js": "3b4ac99a4b2d20858a798193ed0851756ba3ad445bd56a61d79f80351be4dd52",
+    "manifest.json": "d46ee5165d59362699b94b01fba3d492bde642d6575fcc9e5a07ccf13ec8c80f",
+    "ui/app.js": "952f01df3916a64acec0881753e24bd0eed7cbd57411c3e6cdce0c055067f710",
+    "ui/diagnostics.js": "ef68da3fd3cde158f1f6bdbb5bdde7d37ea343c5748bc45496c016cb71d1fdf5",
+    "ui/index.html": "31889a1e5693ee227360785068e76af1fc2fb373245706f75b835af7b0a0b314",
     "ui/interactions.js": "a806ac8df27ed76fe647f7407760000f1d34a2a2f16dd3f158457e9c71135d96",
-    "ui/style.css": "c6ec7b89670d444f8bc08f5324c6a8d2b2689c12de9faf12efe6acac9c731bad",
+    "ui/material-icons.js": "eb35db17683ef05261e84525f96eca94cd7187928b2e419b90b6838c6139bd98",
+    "ui/material-icons.LICENSE.txt": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+    "ui/style.css": "86667e5a041ad2167bac5a92a6ec81016babb8c1c250e16d755cc94e27992f13",
+    "ui/tools-shell.js": "9a6c372e35a7710f1b73e3b70896748e8d49c2a581b880f67524186e0772419c",
+    "ui/tools.css": "b981fdfa1d223e5e06e51a4e9438f828918df580d065568a6f67088a930cd89b",
     "ui/vendor/LICENSE.txt": "3a850fa5f08101db6f40676c2786e10bd2cd5fff7b12ffdf1e0c434d4e49d90c",
     "ui/vendor/qrcode.js": "79ec86f82856005b1c887905cfccfcfbec3821ca61c7fd5a952faa5f778f791c",
-    "ui/widget.css": "d4e4c6f59f7ffb27557248bf5be4dd66b260f64f420d3c7cf7f44b22c5c6af94",
-    "ui/widget.html": "6e30dfaba65e31e25f60cf57e5df9113819fc0ff7dd1c7975dbbeb3b0417261a",
-    "ui/widget.js": "10b9b4cf914635aba12645461baf85d75106601491b56f4d7911992edd91716f"
+    "ui/widget.css": "db41f38a9457e90fbee57c7a1b65e65366c1b1164eac8ae58f818213d6fd6274",
+    "ui/widget.html": "e24f5a0347731ecb26f5ede266f469d1902f74707c40a6998ed36d2ee5efbc46",
+    "ui/widget.js": "2f2a57402a0adcb5367ff2d5867e5d6c349f15d423035ebec5060106021cb48c"
   }
 }

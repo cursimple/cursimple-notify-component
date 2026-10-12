@@ -4,9 +4,10 @@ import {resolve,dirname,extname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../plugin-packages/multi-platform-notify');
-const seed={version:8,page:'feed',context:{timeZone:'Asia/Shanghai',fontScale:1,theme:{background:'#f3f8f5',surface:'#ffffff',surfaceVariant:'#eaf3ed',onSurface:'#1b2a21',onSurfaceVariant:'#6a786f',primary:'#258360',onPrimary:'#ffffff',outlineVariant:'#dbe5df',error:'#b3261e'}},data:{notificationTargets:[]}};
-const sdkScript=`(()=>{const listeners=new Set();let config={targets:[]},history=[];const state=${JSON.stringify(seed)};
-window.CurSimpleComponent={state,subscribe(f){listeners.add(f);f(state)},async request(command,payload){
+const manifest=JSON.parse(await readFile(resolve(root,'manifest.json'),'utf8'));
+const seed={version:9,manifest,page:'feed',context:{timeZone:'Asia/Shanghai',fontScale:1,theme:{background:'#f4f8f4',surface:'#ffffff',surfaceVariant:'#e6eee7',surfaceContainerLow:'#f9fbf9',primaryContainer:'#cbebd9',onPrimaryContainer:'#0e3a26',onSurface:'#1a2620',onSurfaceVariant:'#566b5f',primary:'#3fa277',onPrimary:'#ffffff',outlineVariant:'#d4ddd7',error:'#b3261e'}},data:{notificationTargets:[]}};
+const sdkScript=`(()=>{const listeners=new Set();let config={targets:[]},history=[];const state=${JSON.stringify(seed)};state.context.diagnostics={enabled:sessionStorage.getItem('notify-tools')==='true',activationTaps:5,resetAfterMillis:3000,testContentSupported:true};
+window.CurSimpleComponent={state,subscribe(f){listeners.add(f);f(state)},async request(command,payload={}){
  if(command==='notification.config.get')return {values:config,hosts:[]};
  if(command==='notification.config.save'){config=payload.values;state.data.notificationTargets=payload.targets;listeners.forEach(f=>f(state));return true;}
  if(command==='notification.history')return history;
@@ -20,7 +21,11 @@ window.CurSimpleComponent={state,subscribe(f){listeners.add(f);f(state)},async r
   return {ok:true,status:200,body:JSON.stringify(value)};
  }
 
- if(command==='notification.test'){if(window.previewFail)throw new Error('演示：平台未确认发送');const now=Date.now(),notification={id:'test/'+now,title:'课简通知测试',kind:'test',sourceName:'课简',createdAt:now,expiresAt:now+86400000};const row={notification,targetIds:[payload.targetId],receipts:[{targetId:payload.targetId,status:window.previewStatus||'sent'}],attempts:1};history.unshift(row);return {status:window.previewStatus||'sent'};}
+ if(command==='notification.test'){if(window.previewFail)throw new Error('演示：平台未确认发送');const now=Date.now(),notification={id:'test/'+now,title:payload.title||'课简通知测试',body:payload.body||'这是一条连接测试消息。',kind:'test',sourceName:'课简',createdAt:now,expiresAt:now+86400000};const row={notification,targetIds:[payload.targetId],receipts:[{targetId:payload.targetId,status:window.previewStatus||'sent'}],attempts:1};history.unshift(row);return {status:window.previewStatus||'sent'};}
+ if(command==='ui.navigation')return true;
+ if(command==='debug.advancedTools'){state.context.diagnostics.enabled=payload.enabled;sessionStorage.setItem('notify-tools',String(payload.enabled));listeners.forEach(f=>f(state));return payload.enabled;}
+ if(command==='debug.refreshWidget'){if(window.previewFail)throw new Error('演示：刷新失败');return true;}
+ if(command==='debug.logs'){if(window.previewFail)throw new Error('演示：日志读取失败');return [{time:Date.now(),level:'I',event:'preview.send',source:'演示',message:'模拟发送记录，未连接真实平台'},{time:Date.now()-1000,level:'W',event:'preview.queue',source:'演示',message:'模拟平台排队'},{time:Date.now()-2000,level:'E',event:'preview.error',source:'演示',message:'模拟错误，供筛选测试'}];}
  if(command==='notification.retry')return true;
  if(command==='ui.openExternal')return true;
  throw new Error('预览不支持的操作');

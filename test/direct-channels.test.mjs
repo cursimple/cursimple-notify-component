@@ -90,3 +90,62 @@ test('QQ 邮件通过通用 TLS 传输发送，标题模式不传正文，只有
   if(!result.ok)assert.ok(ctx.receipts.some(row=>row[2]===(result.ambiguous?'unknown':'failed')));
  }
 });
+
+test('微信临时会话失效保留绑定并持久化重试时间，等待期不发送',async()=>{
+ const ctx=fixture(wechat,()=>({ret:-14}));
+ await deliverNotifications(ctx);
+ const saved=ctx.saved.at(-1).value;
+ assert.equal(saved.contextToken,wechat.contextToken);
+ assert.equal(saved.cursor,wechat.cursor);
+ assert.equal(saved.pausedUntil,now+3600000);
+ assert.equal(ctx.calls.length,1);
+ const receipt=ctx.receipts.find(r=>r[2]==='failed');
+ assert.match(receipt[3],/绑定已保留/);
+ assert.equal(receipt[4],saved.pausedUntil);
+ const restarted=fixture(wechat,()=>{throw new Error('must wait');},{[wechat.id]:saved});
+ await deliverNotifications(restarted);
+ assert.equal(restarted.calls.length,0);
+ assert.equal(restarted.receipts.find(r=>r[2]==='failed')[4],saved.pausedUntil);
+});
+
+test('微信等待结束后使用原授权刷新会话并继续发送',async()=>{
+ const ctx=fixture(wechat,({url})=>url.includes('getupdates')?{ret:0,get_updates_buf:'new-cursor',msgs:[{from_user_id:wechat.recipient,context_token:'new-context'}]}:{ret:0},
+  {[wechat.id]:{contextToken:'old-context',cursor:'saved-cursor',pausedUntil:now-1}});
+ await deliverNotifications(ctx);
+ assert.equal(ctx.calls[0].body.get_updates_buf,'saved-cursor');
+ assert.equal(ctx.calls[1].body.msg.context_token,'new-context');
+ assert.equal(ctx.calls[1].options.headers.Authorization,'Bearer '+wechat.botToken);
+ assert.ok(ctx.receipts.some(r=>r[2]==='sent'));
+ assert.equal(ctx.saved.at(-1).value.pausedUntil,undefined);
+});
+
+test('微信普通拒绝与限流不要求重扫，明确 HTTP 401 才提示授权失效',async()=>{
+ for(const status of [401,403,429]){
+  const ctx=fixture(wechat,()=>({raw:{ok:false,status,json:async()=>({code:999})}}));
+  await deliverNotifications(ctx);
+  const receipt=ctx.receipts.find(r=>r[2]==='failed');
+  assert.ok(receipt);
+  assert.equal(/重新扫码绑定/.test(receipt[3]),status===401);
+ }
+ const ctx=fixture(wechat,({url})=>url.includes('getupdates')?{ret:7}:{ret:8});
+ await deliverNotifications(ctx);
+ assert.equal(ctx.calls.length,2);
+ assert.equal(ctx.saved[0].value.contextToken,wechat.contextToken);
+ assert.doesNotMatch(ctx.receipts.find(r=>r[2]==='failed')[3],/重新扫码/);
+});
+
+test('微信发送返回临时失效会持久化延迟且不会报告成功',async()=>{
+ const ctx=fixture(wechat,({url})=>url.includes('getupdates')?{ret:0}:{errcode:-14});
+ await deliverNotifications(ctx);
+ assert.equal(ctx.saved.at(-1).value.pausedUntil,now+3600000);
+ assert.equal(ctx.receipts.some(r=>r[2]==='sent'),false);
+ assert.equal(ctx.receipts.find(r=>r[2]==='failed')[4],now+3600000);
+});
+
+test('微信明确鉴权拒绝即使没有 JSON 也提示重新授权，不误判为发送未知',async()=>{
+ const ctx=fixture(wechat,()=>({raw:{ok:false,status:401,json:async()=>{throw new Error('no JSON');}}}));
+ await deliverNotifications(ctx);
+ assert.equal(ctx.calls.length,1);
+ assert.match(ctx.receipts.find(r=>r[2]==='failed')[3],/授权已失效/);
+ assert.equal(ctx.receipts.some(r=>r[2]==='unknown'),false);
+});

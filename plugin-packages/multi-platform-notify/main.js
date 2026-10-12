@@ -135,8 +135,11 @@ export class ChannelError extends Error { constructor(message, unknown = false, 
 export async function channelRequest(ctx,url,{body,headers={},method=body===undefined?'GET':'POST',timeoutMs=20000,mayDeliver=false}={}) {
   const response = await ctx.network.fetch(url,{method,headers,body:body===undefined?'':JSON.stringify(body),timeoutMs});
   if (response.ambiguous) throw Object.assign(new ChannelError(mayDeliver?'网络结果未确认，请在平台核对后重试':'平台网络暂不可用，请稍后重试',mayDeliver),{network:true});
-  let value;try{value=await response.json();}catch{throw new ChannelError('平台未返回有效回执，请核对后重试',mayDeliver);}
-  if (!response.ok) throw new ChannelError(`平台请求被拒绝（HTTP ${response.status}，代码 ${value.code??value.ret??'无'}）`,mayDeliver&&(response.status>=500||response.status===408),value.code??response.status);
+  let value;try{value=await response.json();}catch{
+    if(!response.ok)throw Object.assign(new ChannelError(`平台请求被拒绝（HTTP ${response.status}）`,mayDeliver&&(response.status>=500||response.status===408),response.status),{httpStatus:response.status});
+    throw new ChannelError('平台未返回有效回执，请核对后重试',mayDeliver);
+  }
+  if (!response.ok) throw Object.assign(new ChannelError(`平台请求被拒绝（HTTP ${response.status}，代码 ${value.code??value.ret??'无'}）`,mayDeliver&&(response.status>=500||response.status===408),value.code??response.status),{httpStatus:response.status});
   return value;
 }
 export async function qqAccessToken(ctx,target) {
@@ -164,12 +167,20 @@ export async function pullWechatSession(ctx,target,session={},timeoutMs=1500) {
   const base=wechatBase(target.url),cursor=session.cursor??target.cursor??'';
   let value;
   try{value=await channelRequest(ctx,base+'/ilink/bot/getupdates',{body:{get_updates_buf:cursor,base_info:baseInfo()},headers:wechatHeaders(target.botToken),timeoutMs});}
-  catch(error){if(error.network)return {...session,contextToken:session.contextToken||target.contextToken,cursor};throw error;}
-  if((value.ret??0)!==0||(value.errcode??0)!==0)throw new ChannelError(`微信会话读取失败（${value.errcode??value.ret}），请重新扫码或在微信中向已连接的机器人发一条消息`);
+  catch(error){if(error.network||!wechatAuthRevoked(error))return {...session,contextToken:session.contextToken||target.contextToken,cursor};throw error;}
+  // Reading updates only refreshes the reply context; a refusal keeps the stored context, as WeChat's own bot client does.
+  if(wechatStale(value))return {...session,contextToken:session.contextToken||target.contextToken,cursor,pausedUntil:ctx.now()+WECHAT_PAUSE_MS};
+  if((value.ret??0)!==0||(value.errcode??0)!==0)return {...session,contextToken:session.contextToken||target.contextToken,cursor};
   const result={...session,cursor:value.get_updates_buf??cursor,contextToken:session.contextToken||target.contextToken};
   for(const message of value.msgs||[])if(!message.group_id&&message.from_user_id===target.recipient&&message.context_token)result.contextToken=message.context_token;
   return result;
 }
+// -14 marks a stale session token; WeChat's bot client pauses an hour and resumes with the same binding.
+const WECHAT_STALE = -14, WECHAT_PAUSE_MS = 60*60*1000;
+const wechatStale = value => value?.ret===WECHAT_STALE||value?.errcode===WECHAT_STALE;
+// Only an HTTP auth refusal means the scanned authorization itself is gone.
+const wechatAuthRevoked = error => error?.httpStatus===401;
+const wechatRetryLater = (ctx,until) => Object.assign(new ChannelError(`微信会话暂时失效，约 ${Math.max(1,Math.ceil((until-ctx.now())/60000))} 分钟后自动重试，绑定已保留`),{retryAt:until});
 async function saveSession(ctx,target,value) {
   if(ctx.notification?.session&&await ctx.notification.session(target.id,value)===false)throw new ChannelError('绑定已修改，停止使用旧配置发送');
   const local=LOCAL_SESSIONS.get(ctx)||{};local[target.id]=value;LOCAL_SESSIONS.set(ctx,local);
@@ -191,12 +202,21 @@ async function sendDirect(ctx,target,event,text) {
     }
     return;
   }
-  const session=await pullWechatSession(ctx,target,ctx.secureSessions?.[target.id]);
-  if(!session.contextToken)throw new ChannelError('微信尚无可用会话，请向扫码连接的机器人发一条消息后重新绑定');
-  await saveSession(ctx,target,session);
+  const stored=localSession(ctx,target);
+  if(stored.pausedUntil>ctx.now())throw wechatRetryLater(ctx,stored.pausedUntil);
+  let session;
+  try{session=await pullWechatSession(ctx,target,stored);}
+  catch(error){if(wechatAuthRevoked(error))throw new ChannelError('微信机器人授权已失效，请重新扫码绑定',false,error.code);throw error;}
+  if(session.pausedUntil>ctx.now()){await saveSession(ctx,target,session);throw wechatRetryLater(ctx,session.pausedUntil);}
+  if(!session.contextToken)throw new ChannelError('微信尚无可用会话，请在微信里给连接的机器人发一条消息');
+  const {pausedUntil,...active}=session;
+  await saveSession(ctx,target,active);
   const digest=await ctx.crypto.hmacSha256('CurSimple/'+target.id,event.id);
-  const result=await channelRequest(ctx,wechatBase(target.url)+'/ilink/bot/sendmessage',{mayDeliver:true,headers:wechatHeaders(target.botToken),body:{base_info:baseInfo(),msg:{from_user_id:'',to_user_id:target.recipient,client_id:'cursimple-'+digest.replace(/[+/=]/g,'_'),message_type:2,message_state:2,item_list:[{type:1,text_item:{text:truncateUtf8(text,3500)}}],context_token:session.contextToken}}});
-  if((result.ret??0)!==0||(result.errcode??0)!==0)throw new ChannelError(`微信拒绝通知（${result.errcode??result.ret}），请重新扫码或向已连接的机器人发送消息`);
+  let result;
+  try{result=await channelRequest(ctx,wechatBase(target.url)+'/ilink/bot/sendmessage',{mayDeliver:true,headers:wechatHeaders(target.botToken),body:{base_info:baseInfo(),msg:{from_user_id:'',to_user_id:target.recipient,client_id:'cursimple-'+digest.replace(/[+/=]/g,'_'),message_type:2,message_state:2,item_list:[{type:1,text_item:{text:truncateUtf8(text,3500)}}],context_token:active.contextToken}}});}
+  catch(error){if(wechatAuthRevoked(error)&&!error.unknown)throw new ChannelError('微信机器人授权已失效，请重新扫码绑定',false,error.code);throw error;}
+  if(wechatStale(result)){const until=ctx.now()+WECHAT_PAUSE_MS;await saveSession(ctx,target,{...active,pausedUntil:until});throw wechatRetryLater(ctx,until);}
+  if((result.ret??0)!==0||(result.errcode??0)!==0)throw new ChannelError(`微信暂未接受这条通知（${result.errcode??result.ret}），稍后自动重试；若一直失败，请在微信里给机器人发一条消息`);
   if(result.ret!==0&&!result.message_id)throw new ChannelError('微信未返回发送确认，结果需核对',true);
 }
 
@@ -343,7 +363,7 @@ export async function deliverNotifications(ctx) {
           await ctx.notification.receipt(event.id,id,'sent','');delivered++;
         } catch(error) {
           if(error.receiptStatus){await ctx.notification.receipt(event.id,id,error.receiptStatus,error.message);if(error.receiptStatus==='queued')queued++;else acceptedCount++;continue;}
-          await ctx.notification.receipt(event.id,id,(accepted || error.unknown)?'unknown':'failed',accepted?'平台已接受，但回执保存未确认，请核对后重试':error.message || '发送未完成');failed++;
+          await ctx.notification.receipt(event.id,id,(accepted || error.unknown)?'unknown':'failed',accepted?'平台已接受，但回执保存未确认，请核对后重试':error.message || '发送未完成',error.retryAt||0);failed++;
         }
       }
     }));
